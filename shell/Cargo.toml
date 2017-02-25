@@ -1,0 +1,6 @@
+[package]
+name = "ish"
+version = "0.1.0"
+authors = ["Shunsuke Shimizu <grafi@grafi.jp>"]
+
+[dependencies]
