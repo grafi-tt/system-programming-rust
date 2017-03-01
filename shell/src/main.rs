@@ -1,9 +1,15 @@
-mod types;
 mod parser;
+mod search;
+mod job;
+mod global;
+mod builtin;
+mod eval;
+
+extern crate libc;
+extern crate nix;
 
 use std::io;
-use io::Write;
-use io::BufRead;
+use io::prelude::*;
 
 const PROMPT: &'static [u8] = b"ish> ";
 
