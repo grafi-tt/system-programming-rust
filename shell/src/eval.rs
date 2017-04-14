@@ -63,7 +63,7 @@ fn do_exec_command(state: &mut global::State, command: &parser::Command, skip_ma
 	use std::os::unix::ffi::{OsStrExt,OsStringExt};
 	use std::os::unix::io::IntoRawFd;
 
-	for redirect in command.redirects {
+	for redirect in &command.redirects {
 		let mut oopt = fs::OpenOptions::new();
 		let _ = match redirect.typ {
 			parser::RedirectType::Input => oopt.read(true),
@@ -93,7 +93,7 @@ fn do_exec_command(state: &mut global::State, command: &parser::Command, skip_ma
 	};
 	let arguments: Result<Vec<CString>, ffi::NulError> = command.arguments.iter().map(|&s| CString::new(s)).collect();
 	let arguments: Vec<CString> = arguments?;
-	let environ: Result<Vec<CString>, ffi::NulError> = env::vars_os().map(|(k, v)| CString::new({ k.push(OsString::from("=")); k.push(v); k.into_vec() })).collect();
+	let environ: Result<Vec<CString>, ffi::NulError> = env::vars_os().map(|(mut k, v)| CString::new({ k.push(OsString::from("=")); k.push(v); k.into_vec() })).collect();
 	let environ: Vec<CString> = environ?;
 	unistd::execve(external, &arguments, &environ)?;
 	unreachable!()
@@ -111,7 +111,7 @@ fn exec_command(state: &mut global::State, command: &parser::Command, skip_match
 }
 
 fn do_eval(state: &mut global::State, pipeline: &parser::Pipeline) -> nix::Result<u8> {
-	let commands = pipeline.commands;
+	let commands = &pipeline.commands;
 	assert!(commands.len() > 0);
 
 	let mut skip_match_builtin = false;
@@ -158,8 +158,8 @@ fn do_eval(state: &mut global::State, pipeline: &parser::Pipeline) -> nix::Resul
 		}
 	}
 
-	let job_desc = state.job_set.push(job_builder.build());
-	let job_desc = job_desc.wait();
+	let mut job_desc = state.job_set.push(job_builder.build());
+	job_desc.wait();
 	Ok(0)
 }
 

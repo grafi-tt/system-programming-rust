@@ -8,7 +8,7 @@ pub struct SearchCache {
 impl SearchCache {
 	pub fn rehash() -> SearchCache {
 		// TODO
-		let h = HashMap::new();
+		let mut h = HashMap::new();
 		h.insert(CString::new("ls").unwrap(), CString::new("/usr/bin/ls").unwrap());
 		SearchCache { imp: h }
 	}
