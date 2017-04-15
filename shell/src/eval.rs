@@ -59,7 +59,7 @@ impl error::Error for ExecError {
 	}
 }
 
-fn do_exec_command(state: &mut global::State, command: &parser::Command, skip_match_builtin: bool, pipe_stdin: RawFd, pipe_stdout: RawFd) -> Result<u8, ExecError> {
+fn do_exec_command(state: &mut global::State, command: &parser::Command, skip_match_builtin: bool) -> Result<u8, ExecError> {
 	use std::os::unix::ffi::{OsStrExt,OsStringExt};
 	use std::os::unix::io::IntoRawFd;
 
@@ -85,9 +85,9 @@ fn do_exec_command(state: &mut global::State, command: &parser::Command, skip_ma
 		Some(e) => e,
 		None => {
 			let mut stderr = io::stderr();
-			stderr.write(b"command not found: ");
-			stderr.write(command.name);
-			stderr.flush();
+			let _ = stderr.write(b"command not found: ");
+			let _ = stderr.write(command.name);
+			let _ = stderr.flush();
 			return Ok(127);
 		}
 	};
@@ -99,10 +99,10 @@ fn do_exec_command(state: &mut global::State, command: &parser::Command, skip_ma
 	unreachable!()
 }
 
-fn exec_command(state: &mut global::State, command: &parser::Command, skip_match_builtin: bool, pipe_stdin: RawFd, pipe_stdout: RawFd) -> ! {
+fn exec_command(state: &mut global::State, command: &parser::Command, skip_match_builtin: bool) -> ! {
 	use std::error::Error;
 
-	let r = do_exec_command(state, command, skip_match_builtin, pipe_stdin, pipe_stdout);
+	let r = do_exec_command(state, command, skip_match_builtin);
 	let s = r.unwrap_or_else(|e| {
 		writeln!(&mut io::stderr(), "{}", e.description());
 		126
@@ -133,34 +133,36 @@ fn do_eval(state: &mut global::State, pipeline: &parser::Pipeline) -> nix::Resul
 			if !is_first {
 				let (pipe_read, pipe_write) = unistd::pipe2(fcntl::O_CLOEXEC)?;
 				pipe_stdin = pipe_read;
+				pipe_stdout = pipe_stdout_next;
 				pipe_stdout_next = pipe_write;
 			}
 			match job_builder.push_fork()? {
 				unistd::ForkResult::Parent{..} => {
 					if !is_last {
-						unistd::close(pipe_stdout);
+						unistd::close(pipe_stdout)?;
 					}
 					if !is_first {
-						unistd::close(pipe_stdin);
+						unistd::close(pipe_stdin)?;
 					}
 				},
 				unistd::ForkResult::Child => {
 					if !is_last {
-						unistd::dup2(pipe_stdout, libc::STDOUT_FILENO);
+						unistd::dup2(pipe_stdout, libc::STDOUT_FILENO)?;
 					}
 					if !is_first {
-						unistd::dup2(pipe_stdin, libc::STDIN_FILENO);
+						unistd::dup2(pipe_stdin, libc::STDIN_FILENO)?;
 					}
-					exec_command(state, &commands[i], skip_match_builtin, pipe_stdin, pipe_stdout);
+					exec_command(state, &commands[i], skip_match_builtin);
 				},
 			}
 			is_last = false;
 		}
 	}
 
+	use job::WaitStatusExt;
 	let mut job_desc = state.job_set.push(job_builder.build());
 	job_desc.wait();
-	Ok(0)
+	Ok(job_desc.job().proccesses.last().unwrap().status.code())
 }
 
 pub fn eval(state: &mut global::State, pipeline: &parser::Pipeline) -> u8 {

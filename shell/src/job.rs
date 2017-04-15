@@ -6,9 +6,10 @@ use nix::sys::wait::WaitStatus;
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum State { Active, Stopped, Terminated }
 
-trait WaitStatusExt {
+pub trait WaitStatusExt {
 	fn get_pid(self) -> Option<pid_t>;
 	fn state(self) -> State;
+	fn code(self) -> u8;
 }
 
 impl WaitStatusExt for WaitStatus {
@@ -25,13 +26,20 @@ impl WaitStatusExt for WaitStatus {
 	}
 	fn state(self) -> State {
 		match self {
-			WaitStatus::Exited(pid, ..) => State::Terminated,
-			WaitStatus::Signaled(pid, ..) => State::Terminated,
-			WaitStatus::Stopped(pid, ..) => State::Stopped,
+			WaitStatus::Exited(..) => State::Terminated,
+			WaitStatus::Signaled(..) => State::Terminated,
+			WaitStatus::Stopped(..) => State::Stopped,
 			#[cfg(any(target_os = "linux", target_os = "android"))]
-			WaitStatus::PtraceEvent(pid, ..) => State::Stopped,
-			WaitStatus::Continued(pid) => State::Active,
+			WaitStatus::PtraceEvent(..) => State::Stopped,
+			WaitStatus::Continued(..) => State::Active,
 			WaitStatus::StillAlive => State::Active,
+		}
+	}
+	fn code(self) -> u8 {
+		match self {
+			WaitStatus::Exited(_, code) => code as u8,
+			WaitStatus::Signaled(_, sig, _) => sig as u8,
+			_ => 0,
 		}
 	}
 }
@@ -73,18 +81,18 @@ impl JobBuilder {
 		match r {
 			unistd::ForkResult::Parent{ child: pid } => {
 				if job.gid == 0 {
-					unistd::setpgid(pid, pid);
+					let _ = unistd::setpgid(pid, pid);
 					job.gid = pid;
 				} else {
-					unistd::setpgid(pid, job.gid);
+					let _ = unistd::setpgid(pid, job.gid);
 				}
 				job.proccesses.push(Proccess { pid: pid, status: WaitStatus::StillAlive });
 			},
 			unistd::ForkResult::Child => {
 				if job.gid == 0 {
-					unistd::setpgid(0, 0);
+					let _ = unistd::setpgid(0, 0);
 				} else {
-					unistd::setpgid(0, job.gid);
+					let _ = unistd::setpgid(0, job.gid);
 				}
 			},
 		}
@@ -140,7 +148,7 @@ impl JobSet {
 
 	pub fn push(&mut self, job: Job) -> JobDescriptor {
 		let job_idx = {
-			let mut go = || {
+			let go = || {
 				let jobs = &mut self.jobs;
 				if let Some((i, space)) = jobs.iter_mut().enumerate().find(|&(_, ref o)| o.is_none()) {
 					*space = Some(job);
@@ -153,6 +161,10 @@ impl JobSet {
 			go()
 		};
 		JobDescriptor { job_idx: job_idx, job_set: self }
+	}
+
+	pub fn new() -> JobSet {
+		JobSet { jobs: vec![], events: vec![] }
 	}
 }
 
@@ -167,7 +179,7 @@ impl<'a> Drop for JobDescriptor<'a> {
 		if self.job().state() == State::Terminated {
 			let jobs = &mut self.job_set.jobs;
 			jobs[self.job_idx] = None;
-			let len = jobs.iter().enumerate().rev().find(|&(i, pr)| pr.is_some()).map_or(0, |(i, _)| i + 1);
+			let len = jobs.iter().enumerate().rev().find(|&(_, pr)| pr.is_some()).map_or(0, |(i, _)| i + 1);
 			jobs.truncate(len);
 		}
 	}
@@ -191,6 +203,5 @@ impl<'a> JobDescriptor<'a> {
 				return;
 			}
 		}
-		unreachable!()
 	}
 }
