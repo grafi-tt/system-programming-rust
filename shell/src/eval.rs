@@ -90,11 +90,12 @@ fn do_exec_command(state: &mut global::State, command: &parser::Command, skip_ma
 			return Ok(127);
 		}
 	};
-	let arguments: Result<Vec<CString>, ffi::NulError> = command.arguments.iter().map(|&s| CString::new(s)).collect();
-	let arguments: Vec<CString> = arguments?;
-	let environ: Result<Vec<CString>, ffi::NulError> = env::vars_os().map(|(mut k, v)| CString::new({ k.push(OsString::from("=")); k.push(v); k.into_vec() })).collect();
-	let environ: Vec<CString> = environ?;
-	unistd::execve(external, &arguments, &environ)?;
+	let argv: Result<Vec<CString>, ffi::NulError> = command.arguments.iter().map(|&s| CString::new(s)).collect();
+	let mut argv: Vec<CString> = argv?;
+	argv.insert(0, CString::new(command.name)?);
+	let envp: Result<Vec<CString>, ffi::NulError> = env::vars_os().map(|(mut k, v)| CString::new({ k.push(OsString::from("=")); k.push(v); k.into_vec() })).collect();
+	let envp: Vec<CString> = envp?;
+	unistd::execve(external, &argv, &envp)?;
 	unreachable!()
 }
 
