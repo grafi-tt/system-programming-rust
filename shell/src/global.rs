@@ -8,7 +8,7 @@ pub struct State {
 
 impl State {
 	pub fn new() -> State {
-		let search_cache = search::SearchCache::rehash();
+		let search_cache = search::SearchCache::new();
 		let job_set = job::JobSet::new();
 		State { search_cache: search_cache, job_set: job_set }
 	}

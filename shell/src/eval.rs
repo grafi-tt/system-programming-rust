@@ -1,12 +1,10 @@
 use parser;
-use search;
 use job;
 use global;
 use builtin;
 
 use std::{env,error,fmt,fs,ffi,io};
 use std::ffi::{CString,OsString,OsStr};
-use std::os::unix::io::RawFd;
 use io::Write;
 use nix;
 use nix::{unistd,fcntl};
@@ -104,7 +102,7 @@ fn exec_command(state: &mut global::State, command: &parser::Command, skip_match
 
 	let r = do_exec_command(state, command, skip_match_builtin);
 	let s = r.unwrap_or_else(|e| {
-		writeln!(&mut io::stderr(), "{}", e.description());
+		let _ = writeln!(&mut io::stderr(), "{}", e.description());
 		126
 	});
 	unsafe{ libc::_exit(s as libc::c_int) }
