@@ -126,14 +126,15 @@ impl JobSet {
 			let mut go = || {
 				for (i, job) in self.jobs.iter_mut().enumerate() {
 					if let Some(ref mut job) = *job {
-						let state = job.state();
+						let old_state = job.state();
 						if let Some(pr) = job.proccesses.iter_mut().find(|pr| pr.pid == pid) {
 							pr.status = status;
 						} else {
 							continue;
 						}
-						if state != job.state() {
-							let rightmost_pr = job.proccesses.iter().rev().find(|pr| pr.status.state() == state).unwrap();
+						let new_state = job.state();
+						if old_state != new_state {
+							let rightmost_pr = job.proccesses.iter().rev().find(|pr| pr.status.state() == new_state).unwrap();
 							self.events.push(JobEvent { job_idx: i, status: rightmost_pr.status });
 						}
 						return i;
