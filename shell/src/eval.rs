@@ -85,6 +85,7 @@ fn do_exec_command(state: &mut global::State, command: &parser::Command, skip_ma
 			let mut stderr = io::stderr();
 			let _ = stderr.write(b"command not found: ");
 			let _ = stderr.write(command.name);
+			let _ = stderr.write(b"\n");
 			let _ = stderr.flush();
 			return Ok(127);
 		}
