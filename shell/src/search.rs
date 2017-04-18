@@ -24,10 +24,12 @@ impl SearchCache {
 	}
 	pub fn rehash(&mut self) {
 		self.imp.clear();
-		for path in env::split_paths(PATH_KEY) {
-			if let Ok(entries) = fs::read_dir(path) {
-				for entry in entries {
-					let _ = self.add_entry(entry);
+		if let Some(ref paths) = env::var_os(PATH_KEY) {
+			for path in env::split_paths(paths) {
+				if let Ok(entries) = fs::read_dir(path) {
+					for entry in entries {
+						let _ = self.add_entry(entry);
+					}
 				}
 			}
 		}
