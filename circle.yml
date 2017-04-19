@@ -8,4 +8,4 @@ compile:
     - cd shell && cargo build
 test:
   override:
-    - cd shell && cargo build
+    - cd shell && cargo test
