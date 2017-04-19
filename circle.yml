@@ -1,6 +1,6 @@
 machine:
 	pre:
-		- curl https://sh.rustup.rs -L | sh -s -- -y
+		- curl -L https://sh.rustup.rs | sh -s -- -y
 compile:
 	override:
 		- pushd shell
