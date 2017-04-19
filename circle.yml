@@ -5,11 +5,7 @@ machine:
     PATH: ${HOME}/.cargo/bin:${PATH}
 compile:
   override:
-    - pushd shell
-    - cargo build
-    - popd
+    - cd shell && cargo build
 test:
   override:
-    - pushd shell
-    - cargo build
-    - popd
+    - cd shell && cargo build
