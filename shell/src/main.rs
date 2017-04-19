@@ -4,6 +4,8 @@ mod job;
 mod global;
 mod builtin;
 mod eval;
+#[cfg(test)]
+mod test;
 
 extern crate libc;
 extern crate nix;
