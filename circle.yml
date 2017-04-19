@@ -1,6 +1,8 @@
 machine:
   pre:
-    - curl -L https://sh.rustup.rs | sudo sh -s -- -y
+    - curl -L https://sh.rustup.rs | sh -s -- -y
+  environment:
+    PATH: ${HOME}/.cargo/bin:${PATH}
 compile:
   override:
     - pushd shell
