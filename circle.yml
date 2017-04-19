@@ -1,13 +1,13 @@
 machine:
-	pre:
-		- curl -L https://sh.rustup.rs | sh -s -- -y
+  pre:
+    - curl -L https://sh.rustup.rs | sh -s -- -y
 compile:
-	override:
-		- pushd shell
-		- cargo build
-		- popd
+  override:
+    - pushd shell
+    - cargo build
+    - popd
 test:
-	override:
-		- pushd shell
-		- cargo build
-		- popd
+  override:
+    - pushd shell
+    - cargo build
+    - popd
