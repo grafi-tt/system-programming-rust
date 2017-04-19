@@ -121,7 +121,6 @@ fn spawn_commands(state: &mut global::State, pipeline: &parser::Pipeline, skip_m
 		if !is_first {
 			let (pipe_read, pipe_write) = unistd::pipe2(fcntl::O_CLOEXEC)?;
 			pipe_stdin = pipe_read;
-			pipe_stdout = pipe_stdout_next;
 			pipe_stdout_next = pipe_write;
 		}
 		match job_builder.push_fork(pipeline.is_background)? {
@@ -143,6 +142,7 @@ fn spawn_commands(state: &mut global::State, pipeline: &parser::Pipeline, skip_m
 				exec_command(state, &pipeline.commands[i], skip_match_builtin);
 			},
 		}
+		pipe_stdout = pipe_stdout_next;
 		is_last = false;
 	}
 	Ok(())
