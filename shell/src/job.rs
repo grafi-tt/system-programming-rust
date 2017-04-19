@@ -1,7 +1,19 @@
+use std::os::unix::io::RawFd;
 use libc::pid_t;
 use nix;
 use nix::unistd;
 use nix::sys::wait::WaitStatus;
+
+pub fn tcsetpgrp(fd: RawFd, pgrp: pid_t) -> nix::Result<()> {
+	unsafe {
+		use nix::sys::signal::*;
+		let ref sa = SigAction::new(SigHandler::SigIgn, SaFlags::empty(), SigSet::empty());
+		let ref sa = sigaction(Signal::SIGTTOU, sa)?;
+		let r = unistd::tcsetpgrp(fd, pgrp);
+		let _ = sigaction(Signal::SIGTTOU, sa);
+		r
+	}
+}
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum State { Active, Stopped, Terminated }
@@ -74,7 +86,7 @@ impl JobBuilder {
 		}
 	}
 
-	pub fn push_fork(&mut self) -> nix::Result<unistd::ForkResult> {
+	pub fn push_fork(&mut self, is_background: bool) -> nix::Result<unistd::ForkResult> {
 		let job = &mut self.imp;
 
 		let r = unistd::fork()?;
@@ -82,6 +94,9 @@ impl JobBuilder {
 			unistd::ForkResult::Parent{ child: pid } => {
 				if job.gid == 0 {
 					let _ = unistd::setpgid(pid, pid);
+					if !is_background {
+						let _ = unistd::tcsetpgrp(1, pid);
+					}
 					job.gid = pid;
 				} else {
 					let _ = unistd::setpgid(pid, job.gid);
@@ -90,13 +105,21 @@ impl JobBuilder {
 			},
 			unistd::ForkResult::Child => {
 				if job.gid == 0 {
-					let _ = unistd::setpgid(0, 0);
+					let pid = unistd::getpid();
+					let _ = unistd::setpgid(pid, pid);
+					if !is_background {
+						let _ = tcsetpgrp(1, pid);
+					}
 				} else {
 					let _ = unistd::setpgid(0, job.gid);
 				}
 			},
 		}
 		Ok(r)
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.imp.proccesses.is_empty()
 	}
 
 	pub fn build(mut self) -> Job {

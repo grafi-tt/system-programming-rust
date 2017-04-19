@@ -110,61 +110,86 @@ fn exec_command(state: &mut global::State, command: &parser::Command, skip_match
 	unsafe{ libc::_exit(s as libc::c_int) }
 }
 
-fn do_eval(state: &mut global::State, pipeline: &parser::Pipeline) -> nix::Result<u8> {
+fn spawn_commands(state: &mut global::State, pipeline: &parser::Pipeline, skip_match_builtin: bool,
+                  job_builder: &mut job::JobBuilder) -> nix::Result<()> {
+	let mut pipe_stdin = 0;
+	let mut pipe_stdout = 0;
+	let mut pipe_stdout_next = 0;
+	let mut is_last = true;
+	for i in (0 .. pipeline.commands.len()).rev() {
+		let is_first = i == 0;
+		if !is_first {
+			let (pipe_read, pipe_write) = unistd::pipe2(fcntl::O_CLOEXEC)?;
+			pipe_stdin = pipe_read;
+			pipe_stdout = pipe_stdout_next;
+			pipe_stdout_next = pipe_write;
+		}
+		match job_builder.push_fork(pipeline.is_background)? {
+			unistd::ForkResult::Parent{..} => {
+				if !is_last {
+					unistd::close(pipe_stdout)?;
+				}
+				if !is_first {
+					unistd::close(pipe_stdin)?;
+				}
+			},
+			unistd::ForkResult::Child => {
+				if !is_last {
+					unistd::dup2(pipe_stdout, libc::STDOUT_FILENO)?;
+				}
+				if !is_first {
+					unistd::dup2(pipe_stdin, libc::STDIN_FILENO)?;
+				}
+				exec_command(state, &pipeline.commands[i], skip_match_builtin);
+			},
+		}
+		is_last = false;
+	}
+	Ok(())
+}
+
+pub enum EvalResult<'a> {
+	Done(u8),
+	Running(job::JobDescriptor<'a>),
+}
+
+fn eval_pipeline<'a>(state: &'a mut global::State, pipeline: &parser::Pipeline) -> EvalResult<'a> {
 	let commands = &pipeline.commands;
 	assert!(commands.len() > 0);
 
 	let mut skip_match_builtin = false;
 	if commands.len() == 1 && commands[0].redirects.is_empty() {
 		if let Some(func) = builtin::match_builtin(commands[0].name) {
-			return Ok(func(state, &commands[0].arguments));
+			let s = func(state, &commands[0].arguments);
+			return EvalResult::Done(s);
 		}
 		skip_match_builtin = true;
 	}
 
 	let mut job_builder = job::JobBuilder::new(commands.len());
-	{
-		let mut pipe_stdin = 0;
-		let mut pipe_stdout = 0;
-		let mut pipe_stdout_next = 0;
-		let mut is_last = true;
-		for i in (0 .. commands.len()).rev() {
-			let is_first = i == 0;
-			if !is_first {
-				let (pipe_read, pipe_write) = unistd::pipe2(fcntl::O_CLOEXEC)?;
-				pipe_stdin = pipe_read;
-				pipe_stdout = pipe_stdout_next;
-				pipe_stdout_next = pipe_write;
-			}
-			match job_builder.push_fork()? {
-				unistd::ForkResult::Parent{..} => {
-					if !is_last {
-						unistd::close(pipe_stdout)?;
-					}
-					if !is_first {
-						unistd::close(pipe_stdin)?;
-					}
-				},
-				unistd::ForkResult::Child => {
-					if !is_last {
-						unistd::dup2(pipe_stdout, libc::STDOUT_FILENO)?;
-					}
-					if !is_first {
-						unistd::dup2(pipe_stdin, libc::STDIN_FILENO)?;
-					}
-					exec_command(state, &commands[i], skip_match_builtin);
-				},
-			}
-			is_last = false;
-		}
+	if let Err(e) = spawn_commands(state, pipeline, skip_match_builtin, &mut job_builder) {
+		use std::error::Error;
+		let _ = writeln!(&mut io::stderr(), "{}", e.description());
 	}
-
-	use job::WaitStatusExt;
-	let mut job_desc = state.job_set.push(job_builder.build());
-	job_desc.wait();
-	Ok(job_desc.job().proccesses.last().unwrap().status.code())
+	if job_builder.is_empty() {
+		EvalResult::Done(126)
+	} else {
+		EvalResult::Running(state.job_set.push(job_builder.build()))
+	}
 }
 
-pub fn eval(state: &mut global::State, pipeline: &parser::Pipeline) -> u8 {
-	do_eval(state, pipeline).unwrap_or(126)
+pub fn eval<'a>(state: &'a mut global::State, pipeline: &parser::Pipeline) -> EvalResult<'a> {
+	use job::WaitStatusExt;
+	match eval_pipeline(state, pipeline) {
+		EvalResult::Done(s) => EvalResult::Done(s),
+		EvalResult::Running(mut job_desc) => {
+			if pipeline.is_background {
+				EvalResult::Running(job_desc)
+			} else {
+				job_desc.wait();
+				let _ = job::tcsetpgrp(1, unistd::getpid());
+				EvalResult::Done(job_desc.job().proccesses.last().unwrap().status.code())
+			}
+		},
+	}
 }
