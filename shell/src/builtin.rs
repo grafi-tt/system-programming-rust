@@ -1,6 +1,6 @@
 use global;
 
-use std::env;
+use std::{env,process,str};
 use nix::unistd;
 
 const HOME_KEY: &'static str = "HOME";
@@ -22,6 +22,11 @@ pub fn builtin_cd(_: &mut global::State, args: &Vec<&[u8]>) -> u8 {
 	0
 }
 
+pub fn builtin_exit(_: &mut global::State, args: &Vec<&[u8]>) -> u8 {
+	let s = args.get(0).and_then(|&a| str::from_utf8(a).ok()).and_then(|s| s.parse().ok()).unwrap_or(0);
+	process::exit(s);
+}
+
 pub fn builtin_rehash(state: &mut global::State, _: &Vec<&[u8]>) -> u8 {
 	state.search_cache.rehash();
 	0
@@ -30,6 +35,7 @@ pub fn builtin_rehash(state: &mut global::State, _: &Vec<&[u8]>) -> u8 {
 pub fn match_builtin(name: &[u8]) -> Option<fn(&mut global::State, &Vec<&[u8]>) -> u8> {
 	match name {
 		b"cd" => Some(builtin_cd),
+		b"exit" => Some(builtin_exit),
 		b"rehash" => Some(builtin_rehash),
 		_ => None,
 	}
